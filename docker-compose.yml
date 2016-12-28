@@ -1,0 +1,32 @@
+centos7_base:
+  build: ./centos7_base/
+
+web:
+  build: ./nginx/
+  ports:
+    - "80:80"
+    - "433:433"
+    - "9000:9000"
+  links:
+    - mysql:mysql
+    - redis:redis
+    - elasticsearch:elasticsearch
+
+mysql:
+  build: ./mysql/
+  ports:
+    - "3306:3306"
+  environment:
+    MYSQL_ROOT_PASSWORD: passw0rd
+
+redis:
+  build: ./redis/
+  ports:
+    - "6379:6379"
+
+elasticsearch:
+  build: ./elasticsearch/
+  ports:
+    - "9200:9200"
+    - "9300:9300"
+
