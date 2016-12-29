@@ -108,7 +108,7 @@ RUN mkdir -p /u01/mysql \
   && chown mysql:mysql /u01/mysql/ \
   && /usr/local/webserver/mysql/bin/mysqld --initialize-insecure --user=mysql --basedir=/usr/local/webserver/mysql --datadir=/u01/mysql \
   && echo "/usr/local/webserver/mysql/lib/" > /etc/ld.so.conf.d/mysql.conf \
-  && /sbin/ldconfig \
+  && /sbin/ldconfig
 
 RUN /etc/init.d/mysqld start \
   && /usr/local/webserver/mysql/bin/mysql -e "grant all privileges on *.* to root@'127.0.0.1' identified by \"$DBROOTPWD\" with grant option;" \
