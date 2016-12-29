@@ -32,9 +32,9 @@ RUN alias vi='vim' \
   && echo "set fileformats=unix,dos" >> ~/.vimrc
 
 # copy packages to /usr/src/, and extract them
-COPY packages/* /usr/src/ \
-  && tar zxf *.tar.gz \
-  && tar zxf *.tgz
+COPY packages/* /usr/src/
+WORKDIR /usr/src/
+RUN cat *.tar.gz *.tgz | tar -zxf - -i
 
 # install libs before php and mysql
 
