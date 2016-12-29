@@ -1,0 +1,12 @@
+ImageMagick.tar.gz
+imagick-3.4.3RC1.tgz
+libiconv-1.14.tar.gz
+libmcrypt-2.5.8.tar.gz
+mcrypt-2.6.8.tar.gz
+mhash-0.9.9.9.tar.gz
+mysql-boost-5.7.17.tar.gz
+nginx-1.10.2.tar.gz
+node-v6.9.2.tar.gz
+pcre-8.39.tar.gz
+php-7.1.0.tar.gz
+redis-3.1.0.tgz
