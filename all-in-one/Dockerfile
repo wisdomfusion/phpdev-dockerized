@@ -3,53 +3,54 @@ MAINTAINER WisdomFusion <WisdomFusion@gmail.com>
 
 # ENVs
 ENV INSTALL_DIR /usr/local/webserver
+EVN DBROOTPWD=123456
 
 # centos repo
-
-RUN mv /etc/yum.repos.d/CentOS-Base.repo{,.backup}
-RUN wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.163.com/.help/CentOS7-Base-163.repo 
-
-RUN yum -y install epel-release
+RUN mv /etc/yum.repos.d/CentOS-Base.repo{,.backup} \
+  && wget -O /etc/yum.repos.d/CentOS-Base.repo http://mirrors.163.com/.help/CentOS7-Base-163.repo \
+  && yum -y install epel-release
 
 # update system
+RUN yum clean all \
+  && yum makecache \
+  && yum -y update
 
-RUN yum clean all && yum makecache 
-#RUN yum -y update
-
-# install compile tools and libs
-
-RUN yum -y install gcc gcc-c++ autoconf automake cmake zlib zlib-devel compat-libstdc++-33 glibc glibc-devel glib2 glib2-devel bzip2 bzip2-devel ncurses ncurses-devel curl curl-devel libjpeg libjpeg-devel libpng libpng-devel freetype freetype-devel libtiff-devel gd gd-devel libxml2 libxml2-devel libXpm libXpm-devel libmcrypt libmcrypt-devel krb5 krb5-devel libidn libidn-devel openssl openssl-devel openldap openldap-devel nss_ldap openldap-clients openldap-servers pam-devel libicu libicu-devel
-
-# install common tools
-
-RUN yum -y install man wget unzip zip nmap net-tools iptraf sysstat iotop ntp vim-enhanced bash-completion
+# install some libs and tools
+RUN yum -y install gcc gcc-c++ autoconf automake cmake zlib zlib-devel compat-libstdc++-33 \
+  glibc glibc-devel glib2 glib2-devel bzip2 bzip2-devel ncurses ncurses-devel curl curl-devel \
+  libjpeg libjpeg-devel libpng libpng-devel freetype freetype-devel libtiff-devel gd gd-devel \
+  libxml2 libxml2-devel libXpm libXpm-devel libmcrypt-devel krb5 krb5-devel libidn libidn-devel \
+  libicu libicu-devel openssl openssl-devel openldap openldap-devel nss_ldap openldap-clients \
+  openldap-servers pam-devel \
+  man wget unzip zip nmap net-tools iptraf sysstat iotop ntp vim-enhanced bash-completion
 
 # Vim settings
-
 RUN alias vi='vim' \
   && echo "alias vi='vim'" >> ~/.bashrc \
   && echo "set fencs=utf-8,ucs-bom,gb18030,gbk,gb2312,cp936" >> ~/.vimrc \
   && echo "set fileformats=unix,dos" >> ~/.vimrc
 
-# copy packages to /usr/src/
-COPY packages/* /usr/src/
+# copy packages to /usr/src/, and extract them
+COPY packages/* /usr/src/ \
+  && tar zxf *.tar.gz \
+  && tar zxf *.tgz
 
 # install libs before php and mysql
 
-WORKDIR /usr/src/
-RUN tar zxf libmcrypt-*.tar.gz
-WORKDIR libmcrypt-2.5.8/
+WORKDIR /usr/src/libmcrypt-2.5.8/
 RUN ./configure \
+    && make \
+    && make install \
+    && /sbin/ldconfig
+WORKDIR libltdl/
+RUN ./configure --enable-ltdl-install \
   && make \
   && make install
-  && /sbin/ldconfig
-WORKDIR libltdl/
-RUN ./configure --enable-ltdl-install && make && make install
 
-WORKDIR /usr/src/
-RUN tar zxf mhash-*.tar.gz
-WORKDIR mhash-0.9.9.9/
-RUN ./configure && make && make install
+WORKDIR /usr/src/mhash-0.9.9.9/
+RUN ./configure \
+    && make \
+    && make install
 
 RUN ln -s /usr/local/lib/libmcrypt.la /usr/lib/libmcrypt.la \
   && ln -s /usr/local/lib/libmcrypt.so /usr/lib/libmcrypt.so \
@@ -61,23 +62,21 @@ RUN ln -s /usr/local/lib/libmcrypt.la /usr/lib/libmcrypt.la \
   && ln -s /usr/local/lib/libmhash.so.2 /usr/lib/libmhash.so.2 \
   && ln -s /usr/local/lib/libmhash.so.2.0.1 /usr/lib/libmhash.so.2.0.1
 
-WORKDIR /usr/src/
-RUN tar zxf mcrypt-*.tar.gz
-WORKDIR mcrypt-2.6.8/
-RUN /sbin/ldconfig
-RUN ./configure && make && make install
+WORKDIR /usr/src/mcrypt-2.6.8/
+RUN /sbin/ldconfig \
+  && ./configure \
+  && make \
+  && make install
 
 RUN echo "/usr/local/lib" >> /etc/ld.so.conf \
   && /sbin/ldconfig
 
 # install mysql
 
-RUN /usr/sbin/groupadd mysql
-RUN /usr/sbin/useradd -g mysql -s /sbin/nologin mysql
+RUN /usr/sbin/groupadd mysql \
+  && /usr/sbin/useradd -g mysql -s /sbin/nologin mysql
 
-WORKDIR /usr/src/
-RUN tar zxf mysql-boost-*.tar.gz
-WORKDIR  mysql-5.7.17/
+WORKDIR /usr/src/mysql-5.7.17/
 RUN cmake \
     -DCMAKE_INSTALL_PREFIX=/usr/local/webserver/mysql \
     -DMYSQL_DATADIR=/u01/mysql \
@@ -100,18 +99,102 @@ RUN cmake \
 RUN cp /usr/local/webserver/mysql/support-files/mysql.server /etc/init.d/mysqld \
   && chmod +x /etc/init.d/mysqld \
   && chkconfig --add mysqld \
-  && chkconfig mysqld on
+  && chkconfig mysqld on \
+  && cat > /etc/my.cnf <<\EOF
+[client]
+port = 3306
+socket = /tmp/mysql.sock
+#default-character-set = utf8mb4
 
-RUN echo "/usr/local/webserver/mysql/lib/" > /etc/ld.so.conf.d/mysql.conf \
-  && /sbin/ldconfig
+[mysqld]
+port = 3306
+socket = /tmp/mysql.sock
+basedir = /usr/local/webserver/mysql
+datadir = /u01/mysql
+pid-file = /u01/mysql/mysql.pid
+user = mysql
+bind-address = 0.0.0.0
+server-id = 1
+#init-connect = 'SET NAMES utf8mb4'
+#character-set-server = utf8mb4
+#skip-name-resolve
+#skip-networking
 
-RUN /etc/init.d/mysqld start
+back_log = 300
+max_connections = 1000
+max_connect_errors = 6000
+open_files_limit = 65535
+table_open_cache = 128
+max_allowed_packet = 4M
+binlog_cache_size = 1M
+max_heap_table_size = 8M
+tmp_table_size = 16M
+read_buffer_size = 2M
+read_rnd_buffer_size = 8M
+sort_buffer_size = 8M
+join_buffer_size = 8M
+key_buffer_size = 4M
+thread_cache_size = 8
+query_cache_type = 1
+query_cache_size = 8M
+query_cache_limit = 2M
+ft_min_word_len = 4
+log_bin = mysql-bin
+binlog_format = mixed
+expire_logs_days = 30
+log_error = /u01/mysql/mysql-error.log
+slow_query_log = 1
+long_query_time = 1
+slow_query_log_file = /u01/mysql/mysql-slow.log
+performance_schema = 0
+explicit_defaults_for_timestamp
+#lower_case_table_names = 1
+skip-external-locking
 
-EVN DBROOTPWD=123456
-RUN /usr/local/webserver/mysql/bin/mysql -e "grant all privileges on *.* to root@'127.0.0.1' identified by \"$DBROOTPWD\" with grant option;" \
-  && /usr/local/webserver/mysql/bin/mysql -e "grant all privileges on *.* to root@'localhost' identified by \"$DBROOTPWD\" with grant option;"
+default_storage_engine = InnoDB
+#default-storage-engine = MyISAM
+innodb_file_per_table = 1
+innodb_open_files = 500
+innodb_buffer_pool_size = 64M
+innodb_write_io_threads = 4
+innodb_read_io_threads = 4
+innodb_thread_concurrency = 0
+innodb_purge_threads = 1
+innodb_flush_log_at_trx_commit = 2
+innodb_log_buffer_size = 2M
+innodb_log_file_size = 32M
+innodb_log_files_in_group = 3
+innodb_max_dirty_pages_pct = 90
+innodb_lock_wait_timeout = 120
 
-RUN /etc/init.d/mysqld stop
+bulk_insert_buffer_size = 8M
+myisam_sort_buffer_size = 8M
+myisam_max_sort_file_size = 10G
+myisam_repair_threads = 1
+interactive_timeout = 28800
+wait_timeout = 28800
+
+[mysqldump]
+quick
+max_allowed_packet = 16M
+
+[Myisamchk]
+Key_Buffer_size = 8M
+sort_buffer_size = 8M
+read_buffer = 4M
+write_buffer = 4M
+EOF
+
+RUN mkdir -p /u01/mysql \
+  && chown mysql:mysql /u01/mysql/ \
+  && /usr/local/webserver/mysql/bin/mysqld --initialize-insecure --user=mysql --basedir=/usr/local/webserver/mysql --datadir=/u01/mysql \
+  && echo "/usr/local/webserver/mysql/lib/" > /etc/ld.so.conf.d/mysql.conf \
+  && /sbin/ldconfig \
+
+RUN /etc/init.d/mysqld start \
+  && /usr/local/webserver/mysql/bin/mysql -e "grant all privileges on *.* to root@'127.0.0.1' identified by \"$DBROOTPWD\" with grant option;" \
+  && /usr/local/webserver/mysql/bin/mysql -e "grant all privileges on *.* to root@'localhost' identified by \"$DBROOTPWD\" with grant option;" \
+  && /etc/init.d/mysqld stop
 
 # install php
 
@@ -121,9 +204,7 @@ RUN /usr/sbin/groupadd www \
   && chmod +w /u01/www \
   && chown -R www:www /u01/www
 
-WORKDIR /usr/src/ 
-RUN tar zxf php-7.*.tar.gz
-WORKDIR php-7.1.0/
+WORKDIR /usr/src/php-7.1.0/
 RUN ./configure --prefix=/usr/local/webserver/php7 \
     --with-config-file-path=/usr/local/webserver/php7/etc \
     --with-libdir=lib64 \
@@ -165,7 +246,7 @@ RUN ./configure --prefix=/usr/local/webserver/php7 \
   && make install
 
 RUN cp php.ini-production /usr/local/webserver/php7/etc/php.ini \
-  && cp /usr/local/webserver/php7/etc/php-fpm.conf.default /usr/local/webserver/php7/etc/php-fpm.conf
+  && cp /usr/local/webserver/php7/etc/php-fpm.conf.default /usr/local/webserver/php7/etc/php-fpm.conf \
   && cp /usr/local/webserver/php7/etc/php-fpm.d/www.conf.default /usr/local/webserver/php7/etc/php-fpm.d/www.conf
 
 RUN sed -i '/^;pid/s/^;//' /usr/local/webserver/php7/etc/php-fpm.conf \
@@ -191,26 +272,20 @@ RUN cp sapi/fpm/init.d.php-fpm /etc/init.d/php-fpm \
 
 # install php extensions
 
-WORKDIR /usr/src/
-RUN tar zxf ImageMagick.tar.gz
-WORKDIR ImageMagick-7.0.4-0/
+WORKDIR /usr/src/ImageMagick-7.0.4-0/
 RUN ./configure \
   && make \
   && make install \
   && /sbin/ldconfig
 
-WORKDIR /usr/src/
-RUN tar zxf imagick-*.tgz
-WORKDIR imagick-3.4.3RC1/
+WORKDIR /usr/src/imagick-3.4.3RC1/
 RUN /sbin/ldconfig \
   && /usr/local/webserver/php7/bin/phpize \
   && ./configure --with-php-config=/usr/local/webserver/php7/bin/php-config \
-  && make
+  && make \
   && make install
 
-WORKDIR /usr/src/
-RUN tar zxf redis-3.1.0.tgz
-WORKDIR redis-3.1.0/
+WORKDIR /usr/src/redis-3.1.0/
 RUN /usr/local/webserver/php7/bin/phpize \
   && ./configure --with-php-config=/usr/local/webserver/php7/bin/php-config \
   && make \
@@ -223,18 +298,14 @@ RUN sed -i '/; extension_dir = "ext"/a\extension_dir = "/usr/local/webserver/php
 
 # install nginx
 
-WORKDIR /usr/src/
-RUN tar zxf pcre-*.tar.gz
-WORKDIR pcre-8.39/
+WORKDIR /usr/src/pcre-8.39/
 RUN ./configure \
   && make \
   && make install
 
-WORKDIR /usr/src/
-RUN tar zxf nginx-*.tar.gz
-WORKDIR nginx-1.10.2/
-RUN /sbin/ldconfig
-RUN ./configure \
+WORKDIR /usr/src/nginx-1.10.2/
+RUN /sbin/ldconfig \
+  && ./configure \
   --prefix=/usr/local/webserver/nginx \
   --user=www \
   --group=www \
